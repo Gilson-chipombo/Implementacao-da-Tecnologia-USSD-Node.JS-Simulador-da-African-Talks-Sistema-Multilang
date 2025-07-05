@@ -3,5 +3,5 @@
 3 - Rode o ngrok para gerar um link público comando "ngrok http 3000"; ATT: se nao tiver conta no ngrok cria uma conta https://dashboard.ngrok.com/signup                                                                                                  
 4 - Gera uma chave da API no AfrianTalks, configura o .env com a chave                                                                                                                                                                                     
 5 - Com o link público que o ngrok forncer crie um novo canal no AfricanTalk (https://account.africastalking.com/apps/sandbox/ussd/channel/create) e em Callback URL com a sua URL, também terás que escolher um codigo do USSD                            
-6 - Abra o Simulador (https://developers.africastalking.com/simulator) entra com numero de telefone qualquer, pode ser o seu na mesmo da UNITEL, e disque o codigo Ex: *384*57041#(arterisco 384 asteriscon 57041 cardinal)                                                                       
+6 - Abra o Simulador (https://developers.africastalking.com/simulator) entra com numero de telefone qualquer, pode ser o seu na mesmo da UNITEL, e disque o codigo Ex: *384*57041# (arterisco 384 asteriscon 57041 cardinal)                                                                       
 
