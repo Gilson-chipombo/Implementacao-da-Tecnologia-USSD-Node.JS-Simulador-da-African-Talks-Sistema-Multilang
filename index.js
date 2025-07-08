@@ -27,6 +27,10 @@ const tips = [
 
 const userSessions = {};
 
+app.get("/", async(req, res) =>{
+  res.status(200).send("Gilson Chipombo, Servidor está online");
+});
+
 app.post("/ussd", async (req, res) => {
   const { phoneNumber, text, sessionId, serviceCode } = req.body;
   let response = "";
