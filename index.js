@@ -2,7 +2,6 @@ require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const africastalking = require("africastalking");
-const axios = require("axios");
 const translations = require("./translations");
 
 const app = express();
@@ -15,143 +14,127 @@ const at = africastalking({
 
 app.use(bodyParser.urlencoded({ extended: false }));
 
-const campaigns = [
-  { title: "Vacinação gratuita", location: "Zango" },
-  { title: "Palestra comunitária", location: "Cazenga" },
-];
-const tips = [
-  "Use mosquiteiro tratado com inseticida.",
-  "Evite água parada perto de casa.",
-  "Cubra-se ao dormir, principalmente à noite.",
-];
-
 const userSessions = {};
 
-app.get("/", async(req, res) =>{
-  res.status(200).send("Gilson Chipombo, Servidor está online");
+app.get("/", (req, res) => {
+  res.status(200).send("Servidor KulelaPay está online 🚀");
 });
 
 app.post("/ussd", async (req, res) => {
-  const { phoneNumber, text, sessionId, serviceCode } = req.body;
+  const { phoneNumber, text } = req.body;
   let response = "";
   const inputs = text.split("*");
   const inputLength = inputs.length;
   const currentInput = inputs[inputLength - 1];
 
   if (!userSessions[phoneNumber]) {
-    userSessions[phoneNumber] = { level: 0, lang: null, tipIndex: 0 };
+    userSessions[phoneNumber] = { lang: null };
   }
 
   const session = userSessions[phoneNumber];
 
-  // === Idioma ===
+  // === Escolha de idioma ===
   if (text === "") {
-    response = `CON 🌍 Escolha o idioma:\n\n1️⃣ Português\n2️⃣ Umbundu\n3️⃣ Inglês`;
+    response = `CON 🌍 Escolha o idioma:\n1️⃣ Português\n2️⃣ Umbundu\n3️⃣ English`;
   }
-
-  // === Salva idioma e mostra menu ===
+  // === Define idioma e mostra menu principal ===
   else if (inputLength === 1 && !session.lang) {
     if (currentInput === "1") session.lang = "pt";
     else if (currentInput === "2") session.lang = "umb";
     else if (currentInput === "3") session.lang = "en";
     else session.lang = "pt";
+
     const t = translations[session.lang];
-    response = `CON 🦟 ${t.welcome}\n\n1️⃣ ${t.menu.report}\n2️⃣ ${t.menu.zones}\n3️⃣ ${t.menu.tips}\n4️⃣ ${t.menu.campaigns}\n5️⃣ ${t.menu.exit}`;
-  } else {
+    response = `CON 💳 ${t.welcome}\n\n${t.mainMenu}`;
+  }
+  // === Menu principal ===
+  else {
     const lang = session.lang || "pt";
     const t = translations[lang];
     const step1 = inputs[1];
 
-    // === 1. Reportar caso ===
-    if (step1 === "1") {
-  if (inputLength === 2) {
-    response = `CON 📍 Passo 1/5\n${t.askProvincia}`;
-  } else if (inputLength === 3) {
-    session.reportProvincia = currentInput;
-    response = `CON 📍 Passo 2/5\n${t.askMunicipio}`;
-  } else if (inputLength === 4) {
-    session.reportMunicipio = currentInput;
-    response = `CON 🏘 Passo 3/5\n${t.askBairro}`;
-  } else if (inputLength === 5) {
-    session.reportBairro = currentInput;
-    response = `CON ⚠ Passo 4/5\n${t.confirmRisk}`;
-  } else if (inputLength === 6) {
-    if (currentInput === "1") {
-      response = `CON 📍 Passo 5/5\n${t.nivelRisco}`;
-    } else {
-      response = `END ❌ ${t.cancel}`;
-    }
-  } else if (inputLength === 7) {
-    session.nivelRisco = currentInput;
-    const reportText = `1*${session.reportProvincia}*${session.reportMunicipio}*${session.reportBairro}*1*${session.nivelRisco}`;
-    const reportData = {
-      sessionId: sessionId || "no-session",
-      phone: phoneNumber,
-      serviceCode: serviceCode || "*123#",
-      text: reportText,
-    };
-
-    
-    try {
-        await axios.post("https://mapazzz-backend.onrender.com/api/ussd", reportData, {
-            headers: { "Content-Type": "application/json" },
-        });
-        console.log("📤 Enviando reporte:", reportData);
-      response = `END ✅ ${t.thankYou}`;
-    } catch (err) {
-      console.error("❌ Erro ao enviar para a API:", err.message);
-      response = `END ⚠ ${t.apiError}`;
-    }
-  }
-}
-
-    // === 2. Zonas críticas ===
-    else if (step1 === "2") 
-      response = `END 🚨 ${t.criticalZones}\nZango 3\nCazenga\nKikolo`;
-    else if (step1 === "3") { // === 3. Dicas ===
-      const index = parseInt(inputs[2] || "0");
-      const dica = tips[index];
-
-      if (currentInput === "0") response = `END ${t.exit}`;
-      else if (dica) response = `CON 🧴 ${t.dicaLabel(index, dica)}`;
-      else response = `END ${t.exit}`;
-    }
-
-    // === 4. Campanhas ===
-    else if (step1 === "4") {
-      if (inputLength === 2) response = `CON 🗺${t.askBairro}`;
-      else if (inputLength === 3) {
-        if (currentInput === "0") response = `CON ${t.mainMenu}`;
-        else {
-          const zona = currentInput.toLowerCase();
-          const result = campaigns.filter(c =>
-            c.location.toLowerCase().includes(zona)
-          );
-
-          if (result.length > 0) {
-            const lista = result
-              .map(c => `- ${c.title} - ${c.location}`)
-              .join("\n");
-            response = `END 📢 Campanhas:\n${lista}`;
-          } else
-              response = `END ⚠ ${t.noCampaigns}`;
+    switch (step1) {
+      case "1": // Minha conta
+        if (inputLength === 2) response = `CON ${t.accountMenu}`;
+        else if (inputLength === 3) {
+          switch (currentInput) {
+            case "1":
+              response = `END 👤 Nome: João Silva\nNIB: 0034 5567 9922`;
+              break;
+            case "2":
+              response = `END 📜 Últimos movimentos:\n- Pagamento 5.000kz\n- Depósito 10.000kz`;
+              break;
+            case "3":
+              response = `END 💰 Saldo atual: 45.230kz`;
+              break;
+            case "4":
+              response = `CON 🔐 Digite o novo PIN:`;
+              break;
+            case "5":
+              response = `END 🧾 Código de utilizador: KLP-90023`;
+              break;
+            case "0":
+              response = `CON ${t.mainMenu}`;
+              break;
+            default:
+              response = `END ${t.invalid}`;
+          }
+        } else if (inputLength === 4 && inputs[2] === "4") {
+          response = `END ✅ PIN alterado com sucesso.`;
         }
-      }
+        break;
+
+      case "2": // Transferências
+        if (inputLength === 2) response = `CON ${t.transferMenu}`;
+        else if (inputLength === 3) {
+          response =
+            currentInput === "1"
+              ? `END 💸 Transferência Carteira→Carteira concluída.`
+              : currentInput === "2"
+              ? `END 🏦 Transferência Carteira→Banco concluída.`
+              : `END ${t.invalid}`;
+        }
+        break;
+
+      case "3":
+        response = `END 🧾 Pagamentos de contas e serviços disponíveis em breve.`;
+        break;
+
+      case "4":
+        response = `END 💵 Receber dinheiro: peça ao remetente para enviar para ${phoneNumber}.`;
+        break;
+
+      case "5":
+        response = `END 📱 Comprar recargas: em breve disponível.`;
+        break;
+
+      case "6":
+        response = `END 🏧 Levantar dinheiro: dirija-se ao agente mais próximo.`;
+        break;
+
+      case "7":
+        response = `END 📍 Agentes KulelaPay próximos: Zango, Cazenga, Viana.`;
+        break;
+
+      case "8":
+        response = `END 🎓 E-University: plataforma de cursos financeiros.`;
+        break;
+
+      case "9":
+        response = `END 🔧 Outros serviços em atualização.`;
+        break;
+
+      default:
+        response = `END ${t.invalid}`;
     }
-    else if (step1 === "5")// 5. Sair 
-      response = `END 👋 ${t.exit}`;
-    else if (step1 === "9") //Voltar ao menu
-      response = `CON ${t.mainMenu}`;
-    else  // Inválido
-      response = `END ❌ ${t.invalid}`;
   }
 
-  if (response.startsWith("END"))
-    delete userSessions[phoneNumber];
+  if (response.startsWith("END")) delete userSessions[phoneNumber];
   res.set("Content-Type", "text/plain");
   res.send(response);
 });
 
-app.listen(port, () => {
-  console.log(`🟢 MAPAZZZ USSD rodando em http://localhost:${port}`);
-});
+app.listen(port, () =>
+  console.log(`💵 KulelaPay USSD rodando em http://localhost:${port}`)
+);
+
