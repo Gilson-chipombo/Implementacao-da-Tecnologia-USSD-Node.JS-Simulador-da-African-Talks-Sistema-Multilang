@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const africastalking = require("africastalking");
+// const axios = require("axios"); // descomentá se quiser integrar a uma API real
 const translations = require("./translations");
 
 const app = express();
@@ -21,16 +22,13 @@ app.get("/", (req, res) => {
 });
 
 app.post("/ussd", async (req, res) => {
-  const { phoneNumber, text } = req.body;
+  const { phoneNumber, text, sessionId, serviceCode } = req.body;
   let response = "";
   const inputs = text.split("*");
   const inputLength = inputs.length;
   const currentInput = inputs[inputLength - 1];
 
-  if (!userSessions[phoneNumber]) {
-    userSessions[phoneNumber] = { lang: null };
-  }
-
+  if (!userSessions[phoneNumber]) userSessions[phoneNumber] = { lang: null, transfer: {} };
   const session = userSessions[phoneNumber];
 
   // === Escolha de idioma ===
@@ -54,7 +52,7 @@ app.post("/ussd", async (req, res) => {
     const step1 = inputs[1];
 
     switch (step1) {
-      case "1": // Minha conta
+      case "1": // Minha conta (mantive como antes)
         if (inputLength === 2) response = `CON ${t.accountMenu}`;
         else if (inputLength === 3) {
           switch (currentInput) {
@@ -68,7 +66,7 @@ app.post("/ussd", async (req, res) => {
               response = `END 💰 Saldo atual: 45.230kz`;
               break;
             case "4":
-              response = `CON 🔐 Digite o novo PIN:`;
+              response = `CON 🔐 ${t.askNewPin}`;
               break;
             case "5":
               response = `END 🧾 Código de utilizador: KLP-90023`;
@@ -80,48 +78,107 @@ app.post("/ussd", async (req, res) => {
               response = `END ${t.invalid}`;
           }
         } else if (inputLength === 4 && inputs[2] === "4") {
-          response = `END ✅ PIN alterado com sucesso.`;
+          response = `END ✅ ${t.pinChanged}`;
         }
         break;
 
-      case "2": // Transferências
-        if (inputLength === 2) response = `CON ${t.transferMenu}`;
+      case "2": // Transferir - novo fluxo realista
+        // Se apenas entrou no menu Transferir
+        if (inputLength === 2) {
+          response = `CON ${t.transferMenu}`;
+        } 
+        // Usuário escolhe tipo de transferência (Carteira->Carteira ou Carteira->Banco)
         else if (inputLength === 3) {
-          response =
-            currentInput === "1"
-              ? `END 💸 Transferência Carteira→Carteira concluída.`
-              : currentInput === "2"
-              ? `END 🏦 Transferência Carteira→Banco concluída.`
-              : `END ${t.invalid}`;
+          if (currentInput === "1" || currentInput === "2") {
+            // guarda o tipo
+            session.transfer.type = currentInput === "1" ? "wallet-wallet" : "wallet-bank";
+            // pede IBAN / conta / carteira
+            response = `CON ${t.askBeneficiary}\n0️⃣ ${t.backShort}`;
+          } else if (currentInput === "0") {
+            response = `CON ${t.mainMenu}`;
+          } else {
+            response = `END ${t.invalid}`;
+          }
+        } 
+        // Recebe o IBAN / conta / carteira do beneficiário
+        else if (inputLength === 4) {
+          if (currentInput === "0") {
+            response = `CON ${t.transferMenu}`;
+          } else {
+            session.transfer.beneficiary = currentInput.trim();
+            response = `CON ${t.askAmount}\n0️⃣ ${t.backShort}`;
+          }
+        } 
+        // Recebe o valor
+        else if (inputLength === 5) {
+          if (currentInput === "0") {
+            response = `CON ${t.askBeneficiary}`;
+          } else {
+            // valida simples: remover vírgulas e verificar número
+            const amountRaw = currentInput.replace(",", ".").trim();
+            const amount = parseFloat(amountRaw);
+            if (isNaN(amount) || amount <= 0) {
+              response = `CON ${t.invalidAmount}\n${t.askAmount}`;
+            } else {
+              session.transfer.amount = amount.toFixed(2);
+              // mostra resumo e pede confirmação
+              response = `CON ${t.confirmTransfer}\n\n${t.transferSummary(session.transfer.beneficiary, session.transfer.amount)}\n\n1️⃣ ${t.confirmYes}  2️⃣ ${t.confirmNo}`;
+            }
+          }
+        }
+        // Recebe confirmação e processa (simulação)
+        else if (inputLength === 6) {
+          if (currentInput === "1") {
+            // Simula a execução: log e resposta final
+            const payload = {
+              sessionId: sessionId || "no-session",
+              phone: phoneNumber,
+              serviceCode: serviceCode || "*123#",
+              action: "transfer",
+              type: session.transfer.type,
+              beneficiary: session.transfer.beneficiary,
+              amount: session.transfer.amount,
+              timestamp: new Date().toISOString(),
+            };
+
+            console.log("📤 Simulated transfer payload:", payload);
+
+            // Aqui você poderia chamar a API real com axios.post(...)
+            response = `END ✅ ${t.transferSuccess}\n${t.transferSummary(session.transfer.beneficiary, session.transfer.amount)}`;
+          } else {
+            response = `END ❌ ${t.cancel}`;
+          }
+        } else {
+          response = `END ${t.invalid}`;
         }
         break;
 
       case "3":
-        response = `END 🧾 Pagamentos de contas e serviços disponíveis em breve.`;
+        response = `END 🧾 ${t.payComingSoon}`;
         break;
 
       case "4":
-        response = `END 💵 Receber dinheiro: peça ao remetente para enviar para ${phoneNumber}.`;
+        response = `END 💵 ${t.receiveInfo(phoneNumber)}`;
         break;
 
       case "5":
-        response = `END 📱 Comprar recargas: em breve disponível.`;
+        response = `END 📱 ${t.rechargeComingSoon}`;
         break;
 
       case "6":
-        response = `END 🏧 Levantar dinheiro: dirija-se ao agente mais próximo.`;
+        response = `END 🏧 ${t.withdrawInfo}`;
         break;
 
       case "7":
-        response = `END 📍 Agentes KulelaPay próximos: Zango, Cazenga, Viana.`;
+        response = `END 📍 ${t.agentsList}`;
         break;
 
       case "8":
-        response = `END 🎓 E-University: plataforma de cursos financeiros.`;
+        response = `END 🎓 ${t.universityInfo}`;
         break;
 
       case "9":
-        response = `END 🔧 Outros serviços em atualização.`;
+        response = `END 🔧 ${t.othersInfo}`;
         break;
 
       default:
@@ -134,7 +191,5 @@ app.post("/ussd", async (req, res) => {
   res.send(response);
 });
 
-app.listen(port, () =>
-  console.log(`💵 KulelaPay USSD rodando em http://localhost:${port}`)
-);
+app.listen(port, () => console.log(`💵 KulelaPay USSD rodando em http://localhost:${port}`));
 
